@@ -1,8 +1,7 @@
 # ui/player_bubble.py
 from PyQt6.QtWidgets import (QFrame, QVBoxLayout, QHBoxLayout,
-                              QLabel, QMenu, QApplication)
+                              QLabel, QMenu)
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor
 from ui.theme import player_color
 
 class PlayerBubble(QFrame):
