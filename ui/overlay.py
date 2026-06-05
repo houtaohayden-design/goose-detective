@@ -1,4 +1,5 @@
 # ui/overlay.py
+import threading
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
                               QPushButton, QLabel)
 from PyQt6.QtCore import Qt, QPoint, QThread, pyqtSignal
@@ -18,42 +19,52 @@ class RecordWorker(QThread):
     """Background thread: pull audio from AudioCapture -> transcribe -> diarize -> emit."""
     new_segment = pyqtSignal(object)
     annotation_ready = pyqtSignal(object, str)
+    error = pyqtSignal(str)
 
-    def __init__(self, capture, transcription_engine, diarization, router, records, parent=None):
+    def __init__(self, capture, transcription_engine, diarization, router, records, records_lock, parent=None):
         super().__init__(parent)
         self._capture = capture
         self._transcription = transcription_engine
         self._diarization = diarization
         self._router = router
         self._records = records
+        self._records_lock = records_lock
         self._running = False
 
     def run(self):
         self._running = True
         while self._running:
             self.msleep(500)
-            for route in (AudioRoute.SYSTEM, AudioRoute.MIC):
-                audio = self._capture.get_audio(route)
-                if len(audio) < 8000:  # < 0.5s, skip
-                    continue
-                result = self._transcription.transcribe(audio)
-                if not result.text.strip():
-                    continue
-                segs = self._diarization.process(audio)
-                for seg in segs:
-                    seg.text = result.text
-                    if route == AudioRoute.MIC:
-                        seg.player_label = "我"
+            try:
+                self._process_once()
+            except Exception as e:
+                self.error.emit(str(e))
+
+    def _process_once(self):
+        for route in (AudioRoute.SYSTEM, AudioRoute.MIC):
+            audio = self._capture.get_audio(route)
+            if len(audio) < 8000:  # < 0.5s, skip
+                continue
+            result = self._transcription.transcribe(audio)
+            if not result.text.strip():
+                continue
+            segs = self._diarization.process(audio)
+            for seg in segs:
+                seg.text = result.text
+                if route == AudioRoute.MIC:
+                    seg.player_label = "我"
+                with self._records_lock:
                     self._records.append({"player": seg.player_label,
                                           "time": f"{seg.start:.0f}s",
                                           "text": seg.text})
-                    self.new_segment.emit(seg)
-                    if self._router:
-                        annotation = self._router.quick_check(
-                            seg.text, seg.player_label, self._records[:-1]
-                        )
-                        if annotation:
-                            self.annotation_ready.emit(seg, annotation)
+                    history_snapshot = list(self._records[:-1])
+                self.new_segment.emit(seg)
+                if self._router:
+                    annotation = self._router.quick_check(
+                        seg.text, seg.player_label, history_snapshot
+                    )
+                    if annotation:
+                        self.annotation_ready.emit(seg, annotation)
 
     def stop(self):
         self._running = False
@@ -65,6 +76,7 @@ class OverlayWindow(QMainWindow):
         super().__init__()
         self._config = config
         self._records = []
+        self._records_lock = threading.Lock()
         self._worker = None
         self._mode = "idle"  # idle | recording | meeting
 
@@ -211,14 +223,20 @@ class OverlayWindow(QMainWindow):
             self._meeting_btn.setText("⏹ 结束会议")
 
     def _start_worker(self):
+        if self._worker is not None:
+            return
         self._capture.start()
         self._worker = RecordWorker(
             self._capture, self._transcription,
-            self._diarization, self._router, self._records
+            self._diarization, self._router, self._records, self._records_lock
         )
         self._worker.new_segment.connect(self._transcript_panel.add_segment)
         self._worker.annotation_ready.connect(self._transcript_panel.update_annotation)
+        self._worker.error.connect(self._on_worker_error)
         self._worker.start()
+
+    def _on_worker_error(self, msg: str):
+        print(f"[RecordWorker error] {msg}")
 
     def _stop_worker(self):
         if self._worker:
@@ -227,9 +245,13 @@ class OverlayWindow(QMainWindow):
         self._capture.stop()
 
     def _run_full_analysis(self):
-        if not self._router or not self._records:
+        if not self._router:
             return
-        results = self._router.analyze(self._records)
+        with self._records_lock:
+            records_snapshot = list(self._records)
+        if not records_snapshot:
+            return
+        results = self._router.analyze(records_snapshot)
         self._analysis_panel.update_results(results)
 
     def _open_settings(self):
@@ -240,8 +262,12 @@ class OverlayWindow(QMainWindow):
     def _on_settings_saved(self):
         self._apply_opacity()
         self.resize(self._config.get("overlay_width", 420), self.height())
+        was_running = self._worker is not None
         self._transcription = self._build_transcription_engine()
         self._router = self._build_router()
+        if was_running:
+            self._stop_worker()
+            self._start_worker()
 
     def _toggle_visibility(self):
         self.setVisible(not self.isVisible())

@@ -67,3 +67,23 @@ def test_build_cloud_engine_when_configured(app, config):
         from ui.overlay import OverlayWindow
         overlay = OverlayWindow(config)
         mock_cloud.assert_called_once()
+
+
+def test_worker_has_error_signal(app, config):
+    from ui.overlay import RecordWorker
+    import threading
+    worker = RecordWorker(MagicMock(), MagicMock(), MagicMock(), None, [], threading.Lock())
+    assert hasattr(worker, "error")
+
+
+def test_process_once_raises_on_transcribe_failure(app, config):
+    from ui.overlay import RecordWorker
+    import threading
+    import numpy as np
+    capture = MagicMock()
+    capture.get_audio.return_value = np.zeros(16000, dtype="float32")
+    transcription = MagicMock()
+    transcription.transcribe.side_effect = RuntimeError("boom")
+    worker = RecordWorker(capture, transcription, MagicMock(), None, [], threading.Lock())
+    with pytest.raises(RuntimeError):
+        worker._process_once()
