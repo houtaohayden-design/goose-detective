@@ -27,36 +27,45 @@ class AudioCapture:
         self._on_chunk = cb
 
     def start(self, mic_device: Optional[int] = None, system_device: Optional[int] = None):
+        if self.is_recording:
+            return
+        self._mic_buffer.clear()
+        self._system_buffer.clear()
         self.is_recording = True
         blocksize = int(self.sample_rate * self.CHUNK_DURATION)
-
-        self._mic_stream = sd.InputStream(
-            device=mic_device,
-            samplerate=self.sample_rate,
-            channels=1,
-            dtype="float32",
-            blocksize=blocksize,
-            callback=self._mic_callback,
-        )
-        self._system_stream = sd.InputStream(
-            device=system_device,
-            samplerate=self.sample_rate,
-            channels=1,
-            dtype="float32",
-            blocksize=blocksize,
-            callback=self._system_callback,
-        )
-        self._mic_stream.start()
-        self._system_stream.start()
+        try:
+            self._mic_stream = sd.InputStream(
+                device=mic_device,
+                samplerate=self.sample_rate,
+                channels=1,
+                dtype="float32",
+                blocksize=blocksize,
+                callback=self._mic_callback,
+            )
+            self._system_stream = sd.InputStream(
+                device=system_device,
+                samplerate=self.sample_rate,
+                channels=1,
+                dtype="float32",
+                blocksize=blocksize,
+                callback=self._system_callback,
+            )
+            self._mic_stream.start()
+            self._system_stream.start()
+        except Exception:
+            self.stop()
+            raise
 
     def stop(self):
         self.is_recording = False
         if self._mic_stream:
             self._mic_stream.stop()
             self._mic_stream.close()
+            self._mic_stream = None
         if self._system_stream:
             self._system_stream.stop()
             self._system_stream.close()
+            self._system_stream = None
 
     def get_audio(self, route: AudioRoute) -> np.ndarray:
         """Drain buffer and return concatenated audio. Thread-safe drain."""
