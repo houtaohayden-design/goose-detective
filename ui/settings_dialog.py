@@ -78,8 +78,17 @@ class SettingsDialog(QDialog):
 
         self._cloud_key = QLineEdit(self._config.get("cloud_stt_key", ""))
         self._cloud_key.setEchoMode(QLineEdit.EchoMode.Password)
-        self._cloud_key.setPlaceholderText("云端STT API Key")
-        form.addRow("云端Key：", self._cloud_key)
+        self._cloud_key.setPlaceholderText("讯飞 APIKey")
+        form.addRow("讯飞 APIKey：", self._cloud_key)
+
+        self._cloud_app_id = QLineEdit(self._config.get("cloud_stt_app_id", ""))
+        self._cloud_app_id.setPlaceholderText("讯飞 APPID")
+        form.addRow("讯飞 APPID：", self._cloud_app_id)
+
+        self._cloud_api_secret = QLineEdit(self._config.get("cloud_stt_api_secret", ""))
+        self._cloud_api_secret.setEchoMode(QLineEdit.EchoMode.Password)
+        self._cloud_api_secret.setPlaceholderText("讯飞 APISecret")
+        form.addRow("讯飞 APISecret：", self._cloud_api_secret)
         return w
 
     def _build_ai_tab(self):
@@ -142,6 +151,8 @@ class SettingsDialog(QDialog):
         self._config.set("stt_engine", "whisper" if self._stt_combo.currentIndex() == 0 else "cloud")
         self._config.set("whisper_model", self._whisper_model.currentText())
         self._config.set("cloud_stt_key", self._cloud_key.text())
+        self._config.set("cloud_stt_app_id", self._cloud_app_id.text())
+        self._config.set("cloud_stt_api_secret", self._cloud_api_secret.text())
         self._config.set("ai_base_url", self._ai_url.text())
         self._config.set("ai_api_key", self._ai_key.text())
         self._config.set("ai_model", self._ai_model.text())
