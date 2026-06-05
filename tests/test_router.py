@@ -40,3 +40,54 @@ def test_router_calls_openai_client():
     assert len(results) == 1
     assert results[0].player == "玩家1"
     assert results[0].suspicion_score == 80
+
+def test_analyze_strips_markdown_fences():
+    router = AnalysisRouter.__new__(AnalysisRouter)
+    mock_client = MagicMock()
+    mock_resp = MagicMock()
+    mock_resp.choices[0].message.content = '```json\n[{"player": "玩家2", "suspicion_score": 60}]\n```'
+    mock_client.chat.completions.create.return_value = mock_resp
+    router._client = mock_client
+    router._model = "test-model"
+    results = router.analyze([{"player": "玩家2", "time": "00:01", "text": "x"}])
+    assert len(results) == 1
+    assert results[0].player == "玩家2"
+    assert results[0].suspicion_score == 60
+
+def test_analyze_malformed_returns_empty():
+    router = AnalysisRouter.__new__(AnalysisRouter)
+    mock_client = MagicMock()
+    mock_resp = MagicMock()
+    mock_resp.choices[0].message.content = "抱歉我无法分析"
+    mock_client.chat.completions.create.return_value = mock_resp
+    router._client = mock_client
+    router._model = "test-model"
+    results = router.analyze([{"player": "玩家1", "time": "00:01", "text": "x"}])
+    assert results == []
+
+def test_quick_check_empty_history_returns_none():
+    router = AnalysisRouter.__new__(AnalysisRouter)
+    assert router.quick_check("我在发电室", "玩家1", []) is None
+
+def test_quick_check_no_contradiction_returns_none():
+    router = AnalysisRouter.__new__(AnalysisRouter)
+    mock_client = MagicMock()
+    mock_resp = MagicMock()
+    mock_resp.choices[0].message.content = "无。"
+    mock_client.chat.completions.create.return_value = mock_resp
+    router._client = mock_client
+    router._model = "test-model"
+    history = [{"player": "玩家1", "time": "00:01", "text": "我在走廊"}]
+    assert router.quick_check("我在发电室", "玩家2", history) is None
+
+def test_quick_check_returns_contradiction():
+    router = AnalysisRouter.__new__(AnalysisRouter)
+    mock_client = MagicMock()
+    mock_resp = MagicMock()
+    mock_resp.choices[0].message.content = "与玩家1的走廊说法矛盾"
+    mock_client.chat.completions.create.return_value = mock_resp
+    router._client = mock_client
+    router._model = "test-model"
+    history = [{"player": "玩家1", "time": "00:01", "text": "我在走廊"}]
+    result = router.quick_check("玩家1当时在发电室", "玩家2", history)
+    assert result == "与玩家1的走廊说法矛盾"

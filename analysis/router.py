@@ -1,8 +1,19 @@
 import json
+import re
 from dataclasses import dataclass, field
 from typing import Optional
 from openai import OpenAI
 from analysis.prompts import SYSTEM_PROMPT, build_analysis_prompt
+
+
+def _strip_json_fences(raw: str) -> str:
+    """Remove markdown code fences (```json ... ```) that models often add."""
+    raw = raw.strip()
+    # Match ```json ... ``` or ``` ... ```
+    fence = re.match(r"^```(?:json)?\s*\n?(.*?)\n?```$", raw, re.DOTALL)
+    if fence:
+        return fence.group(1).strip()
+    return raw
 
 
 @dataclass
@@ -47,16 +58,25 @@ class AnalysisRouter:
             temperature=0.3,
         )
         raw = resp.choices[0].message.content
-        data = json.loads(raw)
-        return [
-            AnalysisResult(
+        if not raw:
+            return []
+        try:
+            data = json.loads(_strip_json_fences(raw))
+        except (json.JSONDecodeError, ValueError):
+            return []
+        if not isinstance(data, list):
+            return []
+        results = []
+        for item in data:
+            if not isinstance(item, dict) or "player" not in item:
+                continue
+            results.append(AnalysisResult(
                 player=item["player"],
-                suspicion_score=item["suspicion_score"],
+                suspicion_score=item.get("suspicion_score", 0),
                 contradictions=item.get("contradictions", []),
                 summary=item.get("summary", ""),
-            )
-            for item in data
-        ]
+            ))
+        return results
 
     def quick_check(self, new_text: str, player: str, history: list) -> Optional[str]:
         """Quick check of a single utterance. Returns contradiction description or None."""
@@ -74,5 +94,8 @@ class AnalysisRouter:
             temperature=0.1,
             max_tokens=60,
         )
-        result = resp.choices[0].message.content.strip()
-        return None if result == "无" else result
+        result = (resp.choices[0].message.content or "").strip()
+        # Treat short responses starting with 无 (无/无。/无矛盾) as "no contradiction"
+        if not result or result.startswith("无"):
+            return None
+        return result
