@@ -14,6 +14,8 @@ class CloudSTTEngine(TranscriptionEngine):
         self._api_key = api_key
 
     def transcribe(self, audio: np.ndarray, sample_rate: int = 16000) -> TranscriptionResult:
+        if len(audio) == 0:
+            return TranscriptionResult(text="")
         wav_bytes = self._to_wav(audio, sample_rate)
         if self._provider == "xunfei":
             return self._xunfei(wav_bytes)
@@ -33,7 +35,15 @@ class CloudSTTEngine(TranscriptionEngine):
         resp = requests.post(url, headers=headers, data=wav_bytes, timeout=10)
         resp.raise_for_status()
         data = resp.json()
-        text = data.get("data", {}).get("result", {}).get("ws", "")
+        ws_list = data.get("data", {}).get("result", {}).get("ws", [])
+        if isinstance(ws_list, list):
+            text = "".join(
+                cw.get("w", "")
+                for item in ws_list
+                for cw in item.get("cw", [])
+            )
+        else:
+            text = str(ws_list)
         return TranscriptionResult(text=text)
 
     def _aliyun(self, wav_bytes: bytes) -> TranscriptionResult:
