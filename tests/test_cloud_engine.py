@@ -22,20 +22,25 @@ def test_aliyun_raises_not_implemented():
     with pytest.raises(NotImplementedError):
         engine.transcribe(audio)
 
-def test_xunfei_extracts_text_from_ws_list():
-    engine = CloudSTTEngine(provider="xunfei", api_key="key")
+def test_xunfei_accumulates_ws_results():
+    engine = CloudSTTEngine(provider="xunfei", api_key="key", app_id="app", api_secret="secret")
     audio = np.zeros(16000, dtype=np.float32)
-    mock_response = MagicMock()
-    mock_response.json.return_value = {
-        "data": {
-            "result": {
-                "ws": [
-                    {"cw": [{"w": "我"}, {"w": "在"}]},
-                    {"cw": [{"w": "发电室"}]},
-                ]
-            }
-        }
-    }
-    with patch("transcription.cloud_engine.requests.post", return_value=mock_response):
+    fake_ws = MagicMock()
+    frames = [
+        '{"code":0,"data":{"status":1,"result":{"ws":[{"cw":[{"w":"我"}]}]}}}',
+        '{"code":0,"data":{"status":2,"result":{"ws":[{"cw":[{"w":"在发电室"}]}]}}}',
+    ]
+    fake_ws.recv.side_effect = frames
+    with patch("transcription.cloud_engine.websocket.create_connection", return_value=fake_ws):
         result = engine.transcribe(audio)
     assert result.text == "我在发电室"
+
+
+def test_xunfei_error_code_returns_empty():
+    engine = CloudSTTEngine(provider="xunfei", api_key="key", app_id="app", api_secret="secret")
+    audio = np.zeros(16000, dtype=np.float32)
+    fake_ws = MagicMock()
+    fake_ws.recv.side_effect = ['{"code":10043,"message":"auth error"}']
+    with patch("transcription.cloud_engine.websocket.create_connection", return_value=fake_ws):
+        result = engine.transcribe(audio)
+    assert result.text == ""

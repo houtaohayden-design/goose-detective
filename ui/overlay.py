@@ -98,6 +98,8 @@ class OverlayWindow(QMainWindow):
         return CloudSTTEngine(
             provider=self._config.get("cloud_stt_provider", "xunfei"),
             api_key=self._config.get("cloud_stt_key", ""),
+            app_id=self._config.get("cloud_stt_app_id", ""),
+            api_secret=self._config.get("cloud_stt_api_secret", ""),
         )
 
     def _build_router(self):

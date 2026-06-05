@@ -10,6 +10,8 @@ DEFAULTS = {
     "whisper_model": "medium",        # tiny/base/small/medium/large-v3
     "cloud_stt_provider": "xunfei",
     "cloud_stt_key": "",
+    "cloud_stt_app_id": "",
+    "cloud_stt_api_secret": "",
     "ai_base_url": "https://api.deepseek.com/v1",
     "ai_api_key": "",
     "ai_model": "deepseek-chat",
