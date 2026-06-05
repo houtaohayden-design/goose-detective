@@ -1,6 +1,11 @@
 # goose_detective.spec
 # -*- mode: python ; coding: utf-8 -*-
+import os
 block_cipher = None
+
+# Icon is optional — only use it if present, so the build doesn't fail without it.
+_icon_path = os.path.join('assets', 'icons', 'goose.ico')
+ICON = _icon_path if os.path.exists(_icon_path) else None
 
 a = Analysis(
     ['main.py'],
@@ -34,13 +39,13 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='鹅探长',
+    name='GooseDetective',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
     console=False,
-    icon='assets/icons/goose.ico',
+    icon=ICON,
 )
 
 coll = COLLECT(
@@ -51,5 +56,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='鹅探长',
+    name='GooseDetective',
 )
