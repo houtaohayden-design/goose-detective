@@ -29,6 +29,7 @@ class RecordWorker(QThread):
         self._router = router
         self._records = records
         self._records_lock = records_lock
+        self._sample_rate = capture.sample_rate
         self._running = False
 
     def run(self):
@@ -45,12 +46,19 @@ class RecordWorker(QThread):
             audio = self._capture.get_audio(route)
             if len(audio) < 8000:  # < 0.5s, skip
                 continue
-            result = self._transcription.transcribe(audio)
-            if not result.text.strip():
-                continue
             segs = self._diarization.process(audio)
             for seg in segs:
-                seg.text = result.text
+                # Slice the audio for this speaker's time range
+                start_idx = max(0, int(seg.start * self._sample_rate))
+                end_idx = min(len(audio), int(seg.end * self._sample_rate))
+                slice_audio = audio[start_idx:end_idx]
+                if len(slice_audio) < 1600:  # < 0.1s, too short to transcribe
+                    continue
+                result = self._transcription.transcribe(slice_audio)
+                text = result.text.strip()
+                if not text:
+                    continue
+                seg.text = text
                 if route == AudioRoute.MIC:
                     seg.player_label = "我"
                 with self._records_lock:

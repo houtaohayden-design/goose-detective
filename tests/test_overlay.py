@@ -80,10 +80,64 @@ def test_process_once_raises_on_transcribe_failure(app, config):
     from ui.overlay import RecordWorker
     import threading
     import numpy as np
+    from dataclasses import dataclass
     capture = MagicMock()
+    capture.sample_rate = 16000
     capture.get_audio.return_value = np.zeros(16000, dtype="float32")
+
+    @dataclass
+    class Seg:
+        start: float
+        end: float
+        text: str = ""
+        player_label: str = "玩家1"
+
+    diarization = MagicMock()
+    diarization.process.return_value = [Seg(start=0.0, end=1.0)]
     transcription = MagicMock()
     transcription.transcribe.side_effect = RuntimeError("boom")
-    worker = RecordWorker(capture, transcription, MagicMock(), None, [], threading.Lock())
+    worker = RecordWorker(capture, transcription, diarization, None, [], threading.Lock())
     with pytest.raises(RuntimeError):
         worker._process_once()
+
+
+def test_process_once_transcribes_per_segment(app, config):
+    from ui.overlay import RecordWorker
+    import threading, numpy as np
+    from dataclasses import dataclass
+    from typing import Optional
+
+    @dataclass
+    class Seg:
+        start: float
+        end: float
+        speaker_id: str = "S0"
+        text: str = ""
+        player_label: Optional[str] = "玩家1"
+
+    capture = MagicMock()
+    capture.sample_rate = 16000
+    capture.get_audio.side_effect = lambda route: np.ones(16000, dtype="float32")
+
+    diar = MagicMock()
+    diar.process.side_effect = [
+        [Seg(start=0.0, end=0.5, player_label="玩家1"),
+         Seg(start=0.5, end=1.0, player_label="玩家2")],
+        [],  # MIC route
+    ]
+
+    transcription = MagicMock()
+    transcription.transcribe.side_effect = [
+        MagicMock(text="第一个人说话"),
+        MagicMock(text="第二个人说话"),
+    ]
+
+    records = []
+    worker = RecordWorker(capture, transcription, diar, None, records, threading.Lock())
+    emitted = []
+    worker.new_segment.connect(lambda s: emitted.append(s))
+    worker._process_once()
+
+    texts = [s.text for s in emitted if s.text]
+    assert "第一个人说话" in texts
+    assert "第二个人说话" in texts
