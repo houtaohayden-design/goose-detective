@@ -1,10 +1,11 @@
 # ui/settings_dialog.py
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QTabWidget,
                               QWidget, QLineEdit, QComboBox, QSlider,
-                              QPushButton, QFormLayout)
+                              QPushButton, QFormLayout, QCheckBox, QSpinBox)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QKeySequence
 from config import Config
+from audio.capture import AudioCapture
 from analysis.router import PRESETS
 
 class HotkeyButton(QPushButton):
@@ -48,6 +49,7 @@ class SettingsDialog(QDialog):
         tabs.addTab(self._build_audio_tab(), "🎙 音频")
         tabs.addTab(self._build_ai_tab(), "🤖 AI模型")
         tabs.addTab(self._build_ui_tab(), "🎨 界面")
+        tabs.addTab(self._build_advanced_tab(), "🛠 高级")
         tabs.addTab(self._build_hotkey_tab(), "⌨ 快捷键")
 
         layout.addWidget(tabs)
@@ -76,6 +78,12 @@ class SettingsDialog(QDialog):
         self._whisper_model.setCurrentText(self._config.get("whisper_model", "medium"))
         form.addRow("Whisper模型：", self._whisper_model)
 
+        self._mic_device = QComboBox()
+        self._system_device = QComboBox()
+        self._populate_audio_devices()
+        form.addRow("麦克风设备：", self._mic_device)
+        form.addRow("系统音频设备：", self._system_device)
+
         self._cloud_key = QLineEdit(self._config.get("cloud_stt_key", ""))
         self._cloud_key.setEchoMode(QLineEdit.EchoMode.Password)
         self._cloud_key.setPlaceholderText("讯飞 APIKey")
@@ -89,7 +97,30 @@ class SettingsDialog(QDialog):
         self._cloud_api_secret.setEchoMode(QLineEdit.EchoMode.Password)
         self._cloud_api_secret.setPlaceholderText("讯飞 APISecret")
         form.addRow("讯飞 APISecret：", self._cloud_api_secret)
+
+        self._hf_token = QLineEdit(self._config.get("hf_token", ""))
+        self._hf_token.setEchoMode(QLineEdit.EchoMode.Password)
+        self._hf_token.setPlaceholderText("Hugging Face Token（说话人分离）")
+        form.addRow("HF Token：", self._hf_token)
         return w
+
+    def _populate_audio_devices(self):
+        def add_items(combo: QComboBox, selected):
+            combo.addItem("系统默认", None)
+            for device in devices:
+                combo.addItem(f"{device['index']} - {device['name']}", device["index"])
+            if selected is not None:
+                for idx in range(combo.count()):
+                    if combo.itemData(idx) == selected:
+                        combo.setCurrentIndex(idx)
+                        break
+
+        try:
+            devices = AudioCapture.list_devices()
+        except Exception:
+            devices = []
+        add_items(self._mic_device, self._config.get("mic_device"))
+        add_items(self._system_device, self._config.get("system_device"))
 
     def _build_ai_tab(self):
         w = QWidget()
@@ -112,6 +143,12 @@ class SettingsDialog(QDialog):
         self._ai_model = QLineEdit(self._config.get("ai_model", ""))
         self._ai_model.setPlaceholderText("模型名称，如 deepseek-chat")
         form.addRow("模型：", self._ai_model)
+
+        self._ai_timeout = QSpinBox()
+        self._ai_timeout.setRange(5, 120)
+        self._ai_timeout.setSuffix(" 秒")
+        self._ai_timeout.setValue(int(self._config.get("ai_timeout", 30)))
+        form.addRow("请求超时：", self._ai_timeout)
         return w
 
     def _build_ui_tab(self):
@@ -127,6 +164,26 @@ class SettingsDialog(QDialog):
         self._width_slider.setRange(300, 700)
         self._width_slider.setValue(self._config.get("overlay_width", 420))
         form.addRow("宽度（px）：", self._width_slider)
+        return w
+
+    def _build_advanced_tab(self):
+        w = QWidget()
+        form = QFormLayout(w)
+
+        self._enable_quick_check = QCheckBox("开启实时矛盾快检")
+        self._enable_quick_check.setChecked(bool(self._config.get("enable_quick_check", True)))
+        form.addRow("实时分析：", self._enable_quick_check)
+
+        self._history_limit = QSpinBox()
+        self._history_limit.setRange(1, 50)
+        self._history_limit.setValue(int(self._config.get("quick_check_history_limit", 10)))
+        form.addRow("快检历史条数：", self._history_limit)
+
+        self._buffer_seconds = QSpinBox()
+        self._buffer_seconds.setRange(5, 300)
+        self._buffer_seconds.setSuffix(" 秒")
+        self._buffer_seconds.setValue(int(self._config.get("audio_buffer_seconds", 30)))
+        form.addRow("音频缓存上限：", self._buffer_seconds)
         return w
 
     def _build_hotkey_tab(self):
@@ -148,18 +205,27 @@ class SettingsDialog(QDialog):
             self._ai_model.setText(PRESETS[name]["model"])
 
     def _save(self):
-        self._config.set("stt_engine", "whisper" if self._stt_combo.currentIndex() == 0 else "cloud")
-        self._config.set("whisper_model", self._whisper_model.currentText())
-        self._config.set("cloud_stt_key", self._cloud_key.text())
-        self._config.set("cloud_stt_app_id", self._cloud_app_id.text())
-        self._config.set("cloud_stt_api_secret", self._cloud_api_secret.text())
-        self._config.set("ai_base_url", self._ai_url.text())
-        self._config.set("ai_api_key", self._ai_key.text())
-        self._config.set("ai_model", self._ai_model.text())
-        self._config.set("overlay_opacity", self._opacity_slider.value() / 100.0)
-        self._config.set("overlay_width", self._width_slider.value())
-        self._config.set("hotkey_record", self._hk_record.text())
-        self._config.set("hotkey_meeting", self._hk_meeting.text())
-        self._config.set("hotkey_toggle", self._hk_toggle.text())
+        self._config.update_many({
+            "stt_engine": "whisper" if self._stt_combo.currentIndex() == 0 else "cloud",
+            "whisper_model": self._whisper_model.currentText(),
+            "mic_device": self._mic_device.currentData(),
+            "system_device": self._system_device.currentData(),
+            "cloud_stt_key": self._cloud_key.text(),
+            "cloud_stt_app_id": self._cloud_app_id.text(),
+            "cloud_stt_api_secret": self._cloud_api_secret.text(),
+            "hf_token": self._hf_token.text(),
+            "ai_base_url": self._ai_url.text().strip(),
+            "ai_api_key": self._ai_key.text(),
+            "ai_model": self._ai_model.text().strip(),
+            "ai_timeout": self._ai_timeout.value(),
+            "enable_quick_check": self._enable_quick_check.isChecked(),
+            "quick_check_history_limit": self._history_limit.value(),
+            "audio_buffer_seconds": self._buffer_seconds.value(),
+            "overlay_opacity": self._opacity_slider.value() / 100.0,
+            "overlay_width": self._width_slider.value(),
+            "hotkey_record": self._hk_record.text(),
+            "hotkey_meeting": self._hk_meeting.text(),
+            "hotkey_toggle": self._hk_toggle.text(),
+        })
         self.settings_saved.emit()
         self.accept()

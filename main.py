@@ -23,7 +23,7 @@ def main():
 
     load_styles(app)
 
-    config = Config(str(Path(__file__).parent / "config.json"))
+    config = Config()
 
     from ui.overlay import OverlayWindow
     window = OverlayWindow(config)

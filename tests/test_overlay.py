@@ -44,6 +44,14 @@ def test_router_built_when_api_key_present(app, config):
     with patch("ui.overlay.AnalysisRouter") as mock_router:
         overlay = make_overlay(config)
         assert overlay._router is not None
+        mock_router.assert_called_once()
+
+
+def test_router_rejects_non_https_base_url(app, config):
+    config.set("ai_api_key", "test-key")
+    config.set("ai_base_url", "http://localhost:8000/v1")
+    overlay = make_overlay(config)
+    assert overlay._router is None
 
 
 def test_initial_mode_is_idle(app, config):
@@ -69,11 +77,34 @@ def test_build_cloud_engine_when_configured(app, config):
         mock_cloud.assert_called_once()
 
 
+def test_capture_uses_buffer_setting(app, config):
+    config.set("audio_buffer_seconds", 15)
+    with patch("ui.overlay.AudioCapture") as mock_capture, \
+         patch("ui.overlay.DiarizationEngine"), \
+         patch("ui.overlay.WhisperEngine"):
+        from ui.overlay import OverlayWindow
+        OverlayWindow(config)
+        mock_capture.assert_called_with(max_buffer_chunks=30)
+
+
 def test_worker_has_error_signal(app, config):
     from ui.overlay import RecordWorker
     import threading
     worker = RecordWorker(MagicMock(), MagicMock(), MagicMock(), None, [], threading.Lock())
     assert hasattr(worker, "error")
+
+
+def test_reassign_updates_records(app, config):
+    overlay = make_overlay(config)
+    segment = MagicMock()
+    segment.speaker_id = "SPEAKER_01"
+    overlay._records = [
+        {"speaker_id": "SPEAKER_01", "segment_id": 1, "player": "玩家1", "text": "a"},
+        {"speaker_id": "SPEAKER_02", "segment_id": 2, "player": "玩家2", "text": "b"},
+    ]
+    overlay._on_segment_reassigned(segment, "玩家5")
+    assert overlay._records[0]["player"] == "玩家5"
+    assert overlay._records[1]["player"] == "玩家2"
 
 
 def test_process_once_raises_on_transcribe_failure(app, config):

@@ -6,9 +6,10 @@ from ui.player_bubble import PlayerBubble
 class TranscriptPanel(QWidget):
     """Left-side live speech record panel."""
 
-    def __init__(self, diarization_engine, max_players: int = 16, parent=None):
+    def __init__(self, diarization_engine, max_players: int = 16, reassign_callback=None, parent=None):
         super().__init__(parent)
         self._engine = diarization_engine
+        self._reassign_callback = reassign_callback
         self._max_players = max_players
         self._player_index: dict = {}  # label -> 0-based color index
         self._color_counter = 0
@@ -67,8 +68,15 @@ class TranscriptPanel(QWidget):
 
     def _on_reassign(self, segment, new_label: str):
         self._engine.reassign(segment, new_label)
+        speaker_id = getattr(segment, "speaker_id", None)
+        for bubble in self._bubbles:
+            if bubble.segment is segment or (speaker_id and getattr(bubble.segment, "speaker_id", None) == speaker_id):
+                bubble.segment.player_label = new_label
+                bubble.refresh_label()
         # Ensure the new label has a color index assigned
         self._color_index_for(new_label)
+        if self._reassign_callback:
+            self._reassign_callback(segment, new_label)
 
     def clear(self):
         for bubble in self._bubbles:

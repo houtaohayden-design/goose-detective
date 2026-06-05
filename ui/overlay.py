@@ -21,7 +21,10 @@ class RecordWorker(QThread):
     annotation_ready = pyqtSignal(object, str)
     error = pyqtSignal(str)
 
-    def __init__(self, capture, transcription_engine, diarization, router, records, records_lock, parent=None):
+    def __init__(
+        self, capture, transcription_engine, diarization, router, records,
+        records_lock, enable_quick_check=True, history_limit=10, parent=None
+    ):
         super().__init__(parent)
         self._capture = capture
         self._transcription = transcription_engine
@@ -29,6 +32,8 @@ class RecordWorker(QThread):
         self._router = router
         self._records = records
         self._records_lock = records_lock
+        self._enable_quick_check = enable_quick_check
+        self._history_limit = history_limit
         self._sample_rate = capture.sample_rate
         self._running = False
 
@@ -62,12 +67,16 @@ class RecordWorker(QThread):
                 if route == AudioRoute.MIC:
                     seg.player_label = "我"
                 with self._records_lock:
-                    self._records.append({"player": seg.player_label,
-                                          "time": f"{seg.start:.0f}s",
-                                          "text": seg.text})
-                    history_snapshot = list(self._records[:-1])
+                    self._records.append({
+                        "player": seg.player_label,
+                        "speaker_id": getattr(seg, "speaker_id", ""),
+                        "segment_id": id(seg),
+                        "time": f"{seg.start:.0f}s",
+                        "text": seg.text,
+                    })
+                    history_snapshot = list(self._records[:-1])[-self._history_limit:]
                 self.new_segment.emit(seg)
-                if self._router:
+                if self._router and self._enable_quick_check:
                     annotation = self._router.quick_check(
                         seg.text, seg.player_label, history_snapshot
                     )
@@ -79,6 +88,22 @@ class RecordWorker(QThread):
         self.wait()
 
 
+class AnalysisWorker(QThread):
+    results_ready = pyqtSignal(list)
+    error = pyqtSignal(str)
+
+    def __init__(self, router, records, parent=None):
+        super().__init__(parent)
+        self._router = router
+        self._records = records
+
+    def run(self):
+        try:
+            self.results_ready.emit(self._router.analyze(self._records))
+        except Exception as e:
+            self.error.emit(str(e))
+
+
 class OverlayWindow(QMainWindow):
     def __init__(self, config: Config):
         super().__init__()
@@ -86,10 +111,12 @@ class OverlayWindow(QMainWindow):
         self._records = []
         self._records_lock = threading.Lock()
         self._worker = None
+        self._analysis_worker = None
         self._mode = "idle"  # idle | recording | meeting
 
-        self._capture = AudioCapture()
+        self._capture = self._build_capture()
         self._diarization = DiarizationEngine(
+            hf_token=self._config.get("hf_token", ""),
             on_new_speaker=lambda label: print(f"新玩家检测到: {label}")
         )
         self._transcription = self._build_transcription_engine()
@@ -114,9 +141,22 @@ class OverlayWindow(QMainWindow):
         key = self._config.get("ai_api_key", "")
         url = self._config.get("ai_base_url", "")
         model = self._config.get("ai_model", "")
-        if not key:
+        if not key or not url or not model or not url.startswith("https://"):
             return None
-        return AnalysisRouter(base_url=url, api_key=key, model=model)
+        return AnalysisRouter(
+            base_url=url,
+            api_key=key,
+            model=model,
+            timeout=int(self._config.get("ai_timeout", 30)),
+        )
+
+    def _build_capture(self):
+        chunk_seconds = getattr(AudioCapture, "CHUNK_DURATION", 0.5)
+        if not isinstance(chunk_seconds, (int, float)) or chunk_seconds <= 0:
+            chunk_seconds = 0.5
+        buffer_seconds = int(self._config.get("audio_buffer_seconds", 30))
+        max_chunks = max(1, int(buffer_seconds / chunk_seconds))
+        return AudioCapture(max_buffer_chunks=max_chunks)
 
     def _setup_window(self):
         self.setWindowFlags(
@@ -177,7 +217,8 @@ class OverlayWindow(QMainWindow):
         body_layout.setSpacing(0)
 
         self._transcript_panel = TranscriptPanel(self._diarization,
-                                                  max_players=self._config.get("max_players", 16))
+                                                  max_players=self._config.get("max_players", 16),
+                                                  reassign_callback=self._on_segment_reassigned)
         self._analysis_panel = AnalysisPanel()
 
         body_layout.addWidget(self._transcript_panel, 3)
@@ -235,10 +276,15 @@ class OverlayWindow(QMainWindow):
     def _start_worker(self):
         if self._worker is not None:
             return
-        self._capture.start()
+        self._capture.start(
+            mic_device=self._config.get("mic_device"),
+            system_device=self._config.get("system_device"),
+        )
         self._worker = RecordWorker(
             self._capture, self._transcription,
-            self._diarization, self._router, self._records, self._records_lock
+            self._diarization, self._router, self._records, self._records_lock,
+            enable_quick_check=bool(self._config.get("enable_quick_check", True)),
+            history_limit=int(self._config.get("quick_check_history_limit", 10)),
         )
         self._worker.new_segment.connect(self._transcript_panel.add_segment)
         self._worker.annotation_ready.connect(self._transcript_panel.update_annotation)
@@ -255,14 +301,26 @@ class OverlayWindow(QMainWindow):
         self._capture.stop()
 
     def _run_full_analysis(self):
-        if not self._router:
+        if not self._router or self._analysis_worker is not None:
             return
         with self._records_lock:
             records_snapshot = list(self._records)
         if not records_snapshot:
             return
-        results = self._router.analyze(records_snapshot)
+        self._analysis_worker = AnalysisWorker(self._router, records_snapshot, self)
+        self._analysis_worker.results_ready.connect(self._on_analysis_finished)
+        self._analysis_worker.error.connect(self._on_analysis_error)
+        self._analysis_worker.finished.connect(self._analysis_worker.deleteLater)
+        self._analysis_worker.error.connect(self._analysis_worker.deleteLater)
+        self._analysis_worker.start()
+
+    def _on_analysis_finished(self, results: list):
+        self._analysis_worker = None
         self._analysis_panel.update_results(results)
+
+    def _on_analysis_error(self, msg: str):
+        self._analysis_worker = None
+        print(f"[AnalysisWorker error] {msg}")
 
     def _open_settings(self):
         dlg = SettingsDialog(self._config, self)
@@ -273,11 +331,28 @@ class OverlayWindow(QMainWindow):
         self._apply_opacity()
         self.resize(self._config.get("overlay_width", 420), self.height())
         was_running = self._worker is not None
+        if was_running:
+            self._stop_worker()
+        self._capture = self._build_capture()
+        self._diarization = DiarizationEngine(
+            hf_token=self._config.get("hf_token", ""),
+            on_new_speaker=lambda label: print(f"新玩家检测到: {label}")
+        )
+        self._transcript_panel._engine = self._diarization
         self._transcription = self._build_transcription_engine()
         self._router = self._build_router()
         if was_running:
-            self._stop_worker()
             self._start_worker()
+
+    def _on_segment_reassigned(self, segment, new_label: str):
+        speaker_id = getattr(segment, "speaker_id", "")
+        segment_id = id(segment)
+        with self._records_lock:
+            for record in self._records:
+                if record.get("segment_id") == segment_id or (
+                    speaker_id and record.get("speaker_id") == speaker_id
+                ):
+                    record["player"] = new_label
 
     def _toggle_visibility(self):
         self.setVisible(not self.isVisible())
@@ -292,4 +367,6 @@ class OverlayWindow(QMainWindow):
 
     def closeEvent(self, event):
         self._stop_worker()
+        if self._analysis_worker:
+            self._analysis_worker.wait(1000)
         super().closeEvent(event)

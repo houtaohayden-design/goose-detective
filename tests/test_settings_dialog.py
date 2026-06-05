@@ -31,9 +31,19 @@ def test_save_persists_values(app, config):
     dlg = SettingsDialog(config)
     dlg._ai_key.setText("secret-key")
     dlg._whisper_model.setCurrentText("large-v3")
+    dlg._hf_token.setText("hf-secret")
+    dlg._ai_timeout.setValue(40)
+    dlg._enable_quick_check.setChecked(False)
+    dlg._history_limit.setValue(12)
+    dlg._buffer_seconds.setValue(90)
     dlg._save()
     assert config.get("ai_api_key") == "secret-key"
     assert config.get("whisper_model") == "large-v3"
+    assert config.get("hf_token") == "hf-secret"
+    assert config.get("ai_timeout") == 40
+    assert config.get("enable_quick_check") is False
+    assert config.get("quick_check_history_limit") == 12
+    assert config.get("audio_buffer_seconds") == 90
 
 def test_preset_changed_fills_url_and_model(app, config):
     dlg = SettingsDialog(config)

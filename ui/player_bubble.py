@@ -28,13 +28,13 @@ class PlayerBubble(QFrame):
 
         # Player name + time
         header = QHBoxLayout()
-        name_label = QLabel(self.segment.player_label or "未知")
-        name_label.setProperty("class", "bubble_player")
-        name_label.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 11px;")
+        self._name_label = QLabel(self.segment.player_label or "未知")
+        self._name_label.setProperty("class", "bubble_player")
+        self._name_label.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 11px;")
         time_str = f"{self.segment.start:.0f}s"
         time_label = QLabel(time_str)
         time_label.setStyleSheet("color: #6a7a8a; font-size: 10px;")
-        header.addWidget(name_label)
+        header.addWidget(self._name_label)
         header.addStretch()
         header.addWidget(time_label)
         layout.addLayout(header)
@@ -58,6 +58,9 @@ class PlayerBubble(QFrame):
             self._annotation_label.show()
         else:
             self._annotation_label.hide()
+
+    def refresh_label(self):
+        self._name_label.setText(self.segment.player_label or "未知")
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.RightButton:

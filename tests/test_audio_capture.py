@@ -26,3 +26,11 @@ def test_get_and_clear_buffer():
     result = cap.get_audio(AudioRoute.MIC)
     assert len(result) == 4
     assert len(cap._mic_buffer) == 0
+
+def test_buffer_drops_old_chunks_at_limit():
+    cap = AudioCapture(max_buffer_chunks=2)
+    cap._mic_callback(np.array([[1.0]], dtype=np.float32), None, None, None)
+    cap._mic_callback(np.array([[2.0]], dtype=np.float32), None, None, None)
+    cap._mic_callback(np.array([[3.0]], dtype=np.float32), None, None, None)
+    result = cap.get_audio(AudioRoute.MIC)
+    assert result.tolist() == [2.0, 3.0]

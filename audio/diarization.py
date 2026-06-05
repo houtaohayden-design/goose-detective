@@ -23,10 +23,9 @@ class DiarizationEngine:
         self._speaker_map: dict = {}  # speaker_id -> player_label
         self._player_counter = 1
         self._on_new_speaker = on_new_speaker   # callback(player_label) notifies UI
+        self._hf_token = hf_token
         self._pipeline = None
         self.__lock = threading.Lock()
-        if hf_token:
-            self._load_pipeline(hf_token)
 
     @property
     def _lock(self) -> threading.Lock:
@@ -48,6 +47,8 @@ class DiarizationEngine:
     def process(self, audio: np.ndarray, sample_rate: int = 16000) -> list:
         """Run speaker diarization on audio chunk, return new SpeakerSegments."""
         with self._lock:
+            if self._pipeline is None and self._hf_token:
+                self._load_pipeline(self._hf_token)
             if self._pipeline is None:
                 # No model: return single segment labeled as unknown
                 seg = SpeakerSegment(start=0.0, end=len(audio)/sample_rate,
