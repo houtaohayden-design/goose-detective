@@ -1,6 +1,6 @@
 # ui/settings_dialog.py
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QTabWidget,
-                              QWidget, QLabel, QLineEdit, QComboBox, QSlider,
+                              QWidget, QLineEdit, QComboBox, QSlider,
                               QPushButton, QFormLayout)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QKeySequence
