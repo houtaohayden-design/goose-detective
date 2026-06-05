@@ -1,5 +1,8 @@
 # config.py
 import json
+import os
+import sys
+import tempfile
 from pathlib import Path
 
 DEFAULTS = {
@@ -28,8 +31,12 @@ class Config:
         if self._path.exists():
             with open(self._path, "r", encoding="utf-8") as f:
                 content = f.read().strip()
-                if content:
+            if content:
+                try:
                     self._data = json.loads(content)
+                except json.JSONDecodeError as e:
+                    print(f"Warning: config file {self._path} is corrupt ({e}); using defaults.", file=sys.stderr)
+                    self._data = {}
 
     def get(self, key: str, default=None):
         if key in self._data:
@@ -43,5 +50,10 @@ class Config:
         self._save()
 
     def _save(self):
-        with open(self._path, "w", encoding="utf-8") as f:
-            json.dump(self._data, f, ensure_ascii=False, indent=2)
+        dir_ = self._path.parent
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=dir_, delete=False, suffix=".tmp"
+        ) as tmp:
+            json.dump(self._data, tmp, ensure_ascii=False, indent=2)
+            tmp_path = tmp.name
+        os.replace(tmp_path, self._path)
