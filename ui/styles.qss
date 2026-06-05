@@ -1,0 +1,162 @@
+/* ui/styles.qss — Goose Goose Duck game style */
+
+QMainWindow, QWidget#overlay {
+    background-color: #1a2a3a;
+    border: 2px solid #f5c842;
+    border-radius: 12px;
+}
+
+/* Title bar */
+QWidget#titlebar {
+    background-color: #0f1e2e;
+    border-bottom: 2px solid #f5c842;
+    border-radius: 10px 10px 0 0;
+    padding: 4px 8px;
+}
+
+QLabel#title_label {
+    color: #f5c842;
+    font-size: 15px;
+    font-weight: bold;
+    font-family: "Nunito", "Microsoft YaHei", sans-serif;
+}
+
+/* Main buttons */
+QPushButton.main_btn {
+    background-color: #f5c842;
+    color: #1a2a3a;
+    border: none;
+    border-radius: 8px;
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: bold;
+    font-family: "Nunito", "Microsoft YaHei", sans-serif;
+}
+QPushButton.main_btn:hover {
+    background-color: #ffd966;
+}
+QPushButton.main_btn:pressed {
+    background-color: #d4a820;
+}
+
+QPushButton.danger_btn {
+    background-color: #e05555;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: bold;
+}
+QPushButton.danger_btn:hover {
+    background-color: #f07070;
+}
+
+/* Speech bubbles */
+QFrame.bubble {
+    border-radius: 10px;
+    margin: 3px 6px;
+    padding: 6px 10px;
+}
+QLabel.bubble_player {
+    font-size: 11px;
+    font-weight: bold;
+    font-family: "Nunito", "Microsoft YaHei", sans-serif;
+}
+QLabel.bubble_text {
+    color: #f0e6cc;
+    font-size: 13px;
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+}
+QLabel.bubble_warning {
+    color: #e08c4a;
+    font-size: 11px;
+}
+QLabel.bubble_ok {
+    color: #55c87a;
+    font-size: 11px;
+}
+
+/* Analysis panel */
+QFrame#analysis_panel {
+    background-color: #0f1e2e;
+    border-left: 1px solid #2a3a4a;
+}
+QLabel.suspicion_name {
+    color: #f0e6cc;
+    font-size: 13px;
+    font-family: "Microsoft YaHei", sans-serif;
+}
+QProgressBar.suspicion_bar {
+    border: none;
+    border-radius: 5px;
+    background-color: #2a3a4a;
+    height: 10px;
+    text-align: center;
+}
+QProgressBar.suspicion_bar::chunk {
+    border-radius: 5px;
+}
+
+/* Scroll area */
+QScrollArea {
+    background: transparent;
+    border: none;
+}
+QScrollBar:vertical {
+    background: #0f1e2e;
+    width: 6px;
+    border-radius: 3px;
+}
+QScrollBar::handle:vertical {
+    background: #f5c842;
+    border-radius: 3px;
+    min-height: 20px;
+}
+
+/* Settings dialog */
+QDialog {
+    background-color: #1a2a3a;
+    color: #f0e6cc;
+}
+QLabel {
+    color: #f0e6cc;
+    font-family: "Microsoft YaHei", sans-serif;
+}
+QLineEdit, QComboBox {
+    background-color: #0f1e2e;
+    color: #f0e6cc;
+    border: 1px solid #2a4a6a;
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-family: "Microsoft YaHei", sans-serif;
+}
+QLineEdit:focus, QComboBox:focus {
+    border-color: #f5c842;
+}
+QSlider::groove:horizontal {
+    background: #2a3a4a;
+    height: 6px;
+    border-radius: 3px;
+}
+QSlider::handle:horizontal {
+    background: #f5c842;
+    width: 14px;
+    height: 14px;
+    border-radius: 7px;
+    margin: -4px 0;
+}
+QTabWidget::pane {
+    border: 1px solid #2a4a6a;
+    border-radius: 6px;
+}
+QTabBar::tab {
+    background: #0f1e2e;
+    color: #8a9aaa;
+    padding: 6px 14px;
+    border-radius: 4px 4px 0 0;
+}
+QTabBar::tab:selected {
+    background: #1a2a3a;
+    color: #f5c842;
+}
