@@ -28,11 +28,13 @@ class AnalysisResult:
 PRESETS = {
     "DeepSeek":   {"base_url": "https://api.deepseek.com/v1",          "model": "deepseek-chat"},
     "OpenAI":     {"base_url": "https://api.openai.com/v1",            "model": "gpt-4o"},
+    # Anthropic provides an OpenAI-compatible layer at /v1/ (use /v1/chat/completions)
     "Claude":     {"base_url": "https://api.anthropic.com/v1",         "model": "claude-opus-4-8"},
     "Gemini":     {"base_url": "https://generativelanguage.googleapis.com/v1beta/openai", "model": "gemini-2.0-flash"},
     "通义千问":   {"base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus"},
     "Kimi":       {"base_url": "https://api.moonshot.cn/v1",           "model": "moonshot-v1-8k"},
-    "文心一言":   {"base_url": "https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat", "model": "ernie-speed-128k"},
+    # Baidu Qianfan v2 OpenAI-compatible endpoint (not the legacy wenxinworkshop path)
+    "文心一言":   {"base_url": "https://qianfan.baidubce.com/v2",      "model": "ernie-4.0-8k"},
 }
 
 
